@@ -1,0 +1,272 @@
+
+.mode-page {
+  min-height: calc(100vh - 76px);
+  padding: 36px 0 70px;
+  background: #f8fafc;
+}
+
+.mode-container {
+  max-width: 1050px;
+}
+
+.mode-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.mode-back:hover {
+  color: #2563eb;
+}
+
+.mode-heading {
+  max-width: 650px;
+  margin: 48px auto 45px;
+  text-align: center;
+}
+
+.mode-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+}
+
+.mode-heading h1 {
+  margin: 15px 0 12px;
+  color: #1e293b;
+  font-size: clamp(27px, 4vw, 40px);
+  line-height: 1.25;
+}
+
+.mode-heading p {
+  max-width: 550px;
+  margin: 0 auto;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.mode-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 25px;
+}
+
+.mode-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 30px;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  background: #ffffff;
+  box-shadow: 0 10px 30px rgba(37, 99, 235, 0.06);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.mode-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 18px 40px rgba(37, 99, 235, 0.10);
+}
+
+.mode-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 23px;
+}
+
+.mode-icon {
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border-radius: 16px;
+}
+
+.lecture .mode-icon {
+  color: #2563eb;
+  background: #dbeafe;
+}
+
+.study .mode-icon {
+  color: #059669;
+  background: #d1fae5;
+}
+
+.mode-tag {
+  padding: 7px 10px;
+  border-radius: 20px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+}
+
+.lecture .mode-tag {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.study .mode-tag {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.mode-card h2 {
+  margin: 0 0 10px;
+  color: #1e293b;
+  font-size: 24px;
+}
+
+.mode-description {
+  min-height: 70px;
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.mode-features {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  margin: 25px 0 28px;
+}
+
+.mode-feature {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.mode-check {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: #dbeafe;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.study .mode-check {
+  background: #d1fae5;
+  color: #059669;
+}
+
+.mode-button {
+  width: 100%;
+  min-height: 47px;
+  margin-top: auto;
+  color: #ffffff;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.lecture .mode-button {
+  background: #2563eb;
+}
+
+.lecture .mode-button:hover {
+  background: #1e40af;
+  transform: translateY(-1px);
+}
+
+.study .mode-button {
+  background: #059669;
+}
+
+.study .mode-button:hover {
+  background: #047857;
+  transform: translateY(-1px);
+}
+
+.mode-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  max-width: 680px;
+  margin: 32px auto 0;
+  padding: 17px 20px;
+  border: 1px solid #bfdbfe;
+  border-radius: 13px;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.mode-tip svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.mode-tip p {
+  margin: 0;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+@media (max-width: 768px) {
+  .mode-page {
+    padding: 28px 0 55px;
+  }
+
+  .mode-heading {
+    margin: 38px auto 32px;
+  }
+
+  .mode-grid {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .mode-card {
+    padding: 25px;
+  }
+
+  .mode-description {
+    min-height: auto;
+  }
+}
+
+@media (max-width: 380px) {
+  .mode-card {
+    padding: 20px;
+  }
+
+  .mode-card h2 {
+    font-size: 21px;
+  }
+
+  .mode-tag {
+    font-size: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mode-card,
+  .mode-button {
+    transition: none;
+  }
+
+  .mode-card:hover,
+  .mode-button:hover {
+    transform: none;
+  }
+}
