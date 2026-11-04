@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { BookOpen, Menu, X } from "lucide-react";
@@ -35,15 +36,22 @@ export default function Navbar() {
           id="navbar-links"
           className={`navbar-links ${menuOpen ? "open" : ""}`}
         >
-          <a href="#home" onClick={closeMenu}>
+          <a href="/#home" onClick={closeMenu}>
             Home
           </a>
-          <a href="#features" onClick={closeMenu}>
+
+          <a href="/#features" onClick={closeMenu}>
             Features
           </a>
-          <a href="#how-it-works" onClick={closeMenu}>
+
+          <a href="/#how-it-works" onClick={closeMenu}>
             How It Works
           </a>
+
+          <Link to="/history" onClick={closeMenu}>
+            History
+          </Link>
+
           <Link
             to="/mode-selection"
             className="btn btn-primary navbar-cta"

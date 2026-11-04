@@ -127,21 +127,21 @@ export default function LectureUpload() {
     setError("");
   };
 
-  const continueToProcessing = () => {
-    if (!file || error) {
-      return;
-    }
+const continueToProcessing = () => {
+  if (!file || error) {
+    return;
+  }
 
-    // Temporary local navigation.
-    // Actual file upload will be connected to Flask later.
-    navigate("/processing", {
-      state: {
-        fileName: file.name,
-        fileSize: file.size,
-        fileType: getFileType(file),
-      },
-    });
-  };
+  navigate("/processing", {
+    state: {
+      mode: "lecture",
+      file: file,
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: getFileType(file),
+    },
+  });
+};
 
   const fileType = file ? getFileType(file) : null;
   const FileIcon = fileType === "video" ? FileVideo : FileAudio;
@@ -267,8 +267,10 @@ export default function LectureUpload() {
           <div className="upload-info">
             <Info size={19} />
             <p>
-              This page currently validates files locally. Your lecture will be
-              sent to the AI backend after Flask integration.
+              <p>
+                Your uploaded lecture will be processed using speech recognition
+                and AI to generate structured study notes.
+              </p>
             </p>
           </div>
         </div>

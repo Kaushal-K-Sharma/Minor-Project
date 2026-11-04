@@ -1,3 +1,4 @@
+
 const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:5000"
 ).replace(/\/+$/, "");
@@ -16,7 +17,16 @@ async function request(endpoint, options = {}) {
         ? data.error || data.message
         : data;
 
-    throw new Error(message || `Request failed: ${response.status}`);
+    const error = new Error(message || `Request failed: ${response.status}`);
+
+    // Preserve job ID so the frontend can retry without transcription.
+    if (typeof data === "object" && data !== null) {
+      error.job_id = data.job_id;
+      error.transcript_saved = data.transcript_saved;
+      error.status = response.status;
+    }
+
+    throw error;
   }
 
   return data;
@@ -30,6 +40,15 @@ export function uploadLecture(file) {
     method: "POST",
     body: formData,
   });
+}
+
+export function retryLectureNotes(jobId) {
+  return request(
+    `/api/lecture/retry-notes/${encodeURIComponent(jobId)}`,
+    {
+      method: "POST",
+    }
+  );
 }
 
 export function generateStudyNotes({ topic, subtopic, level }) {
@@ -48,4 +67,11 @@ export function getNotesHistory() {
 
 export function getNote(noteId) {
   return request(`/api/notes/${encodeURIComponent(noteId)}`);
+}
+
+
+export function deleteNote(noteId) {
+  return request(`/api/notes/${encodeURIComponent(noteId)}`, {
+    method: "DELETE",
+  });
 }
