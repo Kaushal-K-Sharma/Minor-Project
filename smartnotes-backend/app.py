@@ -27,12 +27,13 @@ NOTES_DIR.mkdir(exist_ok=True)
 
 app = Flask(__name__)
 
-# Allow requests from the React development server
+# Allow requests from local development and deployed frontend
 CORS(
     app,
     resources={r"/api/*": {"origins": [
         "http://localhost:5173",
-        "http://127.0.0.1:5173"
+        "http://127.0.0.1:5173",
+        "https://smartnotes-frontend-three.vercel.app"
     ]}}
 )
 
