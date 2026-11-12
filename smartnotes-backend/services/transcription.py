@@ -13,6 +13,7 @@ from faster_whisper import WhisperModel
 # Change to "small" if your computer handles it comfortably.
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base")
 
+print("DEBUG: Loading Whisper model now.", flush=True)
 
 @lru_cache(maxsize=1)
 def get_model():
@@ -52,6 +53,12 @@ def extract_audio(input_path, output_path):
         raise RuntimeError("Audio extraction failed. The file may be damaged or unsupported.")
 
 
+
+
+
+print("DEBUG: Audio extraction completed.", flush=True)
+
+
 def transcribe_file(input_path):
     """
     Convert an audio/video file into text.
@@ -81,6 +88,8 @@ def transcribe_file(input_path):
 
         transcript_parts = []
         timestamp_segments = []
+
+    print("DEBUG: Starting transcription iteration.", flush=True)
 
         for segment in segments:
             text = segment.text.strip()
