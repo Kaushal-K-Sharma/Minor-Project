@@ -73,12 +73,15 @@ def transcribe_file(input_path):
     with tempfile.TemporaryDirectory() as temp_dir:
         audio_path = Path(temp_dir) / "lecture_audio.wav"
 
-        print("Extracting audio...")
+        print("Extracting audio...", flush=True)
         extract_audio(input_path, audio_path)
 
-        print("Starting speech transcription...")
+        print("DEBUG: Audio extraction completed.", flush=True)
+        print("Starting speech transcription...", flush=True)
 
+        print("DEBUG: Loading Whisper model now.", flush=True)
         model = get_model()
+        print("DEBUG: Whisper model loaded successfully.", flush=True)
 
         segments, info = model.transcribe(
             str(audio_path),
@@ -89,7 +92,7 @@ def transcribe_file(input_path):
         transcript_parts = []
         timestamp_segments = []
 
-    print("DEBUG: Starting transcription iteration.", flush=True)
+        print("DEBUG: Starting transcription iteration.", flush=True)
 
         for segment in segments:
             text = segment.text.strip()
@@ -114,6 +117,8 @@ def transcribe_file(input_path):
             raise RuntimeError(
                 "No speech was detected. Please upload a clearer lecture recording."
             )
+
+        print("DEBUG: Transcription completed.", flush=True)
 
         return {
             "transcript": transcript,
