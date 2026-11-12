@@ -27,15 +27,18 @@ NOTES_DIR.mkdir(exist_ok=True)
 
 app = Flask(__name__)
 
-# Allow requests from local development and deployed frontend
+# Allow requests from local development and Vercel deployments
 CORS(
     app,
     resources={r"/api/*": {"origins": [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
-        "https://smartnotes-frontend-three.vercel.app"
+        "https://smartnotes-frontend-three.vercel.app",
+        "https://smartnotes-frontend-rgek7weiv-smart-notes.vercel.app"
     ]}}
 )
+
+
 
 # Upload size limit: 500 MB
 app.config["MAX_CONTENT_LENGTH"] = 500 * 1024 * 1024
