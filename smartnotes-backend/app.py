@@ -38,6 +38,22 @@ CORS(
     ]}}
 )
 
+@app.before_request
+def log_request():
+    if request.path.startswith("/api/"):
+        print(
+            f"INCOMING REQUEST: {request.method} {request.path}",
+            flush=True
+        )
+        print(
+            f"ORIGIN: {request.headers.get('Origin')}",
+            flush=True
+        )
+        print(
+            f"CONTENT LENGTH: {request.content_length}",
+            flush=True
+        )
+
 
 
 # Upload size limit: 500 MB
@@ -238,7 +254,7 @@ def process_lecture():
         file_path = UPLOAD_DIR / unique_name
         uploaded_file.save(file_path)
 
-        print(f"Lecture received: {original_name}")
+        print(f"Lecture received: {original_name}", flush=True)
 
         # Step 1: Speech-to-text
         transcription = transcribe_file(file_path)
