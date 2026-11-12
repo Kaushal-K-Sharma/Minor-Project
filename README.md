@@ -11,3 +11,5 @@ python app.py
 
 #######
 for frontend
+npm run dev
+

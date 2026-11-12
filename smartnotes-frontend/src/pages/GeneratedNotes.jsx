@@ -1,6 +1,7 @@
 
-import { useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import mermaid from "mermaid";
 import {
   ArrowLeft,
   BookOpen,
@@ -10,6 +11,10 @@ import {
   Lightbulb,
   ListChecks,
   Download,
+  Award,
+  Brain,
+  Network,
+  Sparkles,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import {
@@ -18,16 +23,21 @@ import {
 } from "../utils/exportNotes";
 import "./GeneratedNotes.css";
 
-function formatTimestamp(seconds) {
+mermaid.initialize({
+  startOnLoad: false,
+  theme: "default",
+  securityLevel: "strict",
+});
+
+function formatTimestamp(seconds = 0) {
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
 
   return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
 }
 
-
 function detectImportantPoints(segments = []) {
-  const importantPatterns = [
+  const patterns = [
     /\b(very important|extremely important|most important)\b/i,
     /\b(remember this|remember that|keep in mind)\b/i,
     /\b(note that|take note|pay attention)\b/i,
@@ -50,22 +60,141 @@ function detectImportantPoints(segments = []) {
   return segments.filter((segment) => {
     const text = segment.text || "";
 
-    // Ignore promotional and channel-related statements.
     if (promotionalPatterns.some((pattern) => pattern.test(text))) {
       return false;
     }
 
-    // Highlight only statements containing meaningful emphasis phrases.
-    return importantPatterns.some((pattern) => pattern.test(text));
+    return patterns.some((pattern) => pattern.test(text));
   });
 }
 
+function calculateReadiness(notes) {
+  const checks = [
+    Boolean(notes.summary?.trim()),
+    (notes.keyPoints || []).length >= 4,
+    (notes.sections || []).length >= 3,
+    (notes.sections || []).some((s) => s.definition?.trim()),
+    (notes.sections || []).some((s) => s.examples?.length),
+    (notes.sections || []).some((s) => s.bullets?.length),
+    (notes.conceptExamples || []).length >= 2,
+    (notes.keywords || []).length >= 5,
+    (notes.revision || []).length >= 4,
+    (notes.questions || []).length >= 3,
+  ];
+
+  const completed = checks.filter(Boolean).length;
+  return Math.round((completed / checks.length) * 100);
+}
+
+function MermaidDiagram({ diagram }) {
+  const rawId = useId();
+  const elementId = `mermaid-${rawId.replace(/[^a-zA-Z0-9]/g, "")}`;
+  const [svg, setSvg] = useState("");
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    async function renderDiagram() {
+      if (!diagram?.mermaid) return;
+
+      try {
+        const result = await mermaid.render(
+          elementId,
+          diagram.mermaid
+        );
+
+        if (active) {
+          setSvg(result.svg);
+          setError(false);
+        }
+      } catch (err) {
+        console.error("Diagram rendering failed:", err);
+        if (active) setError(true);
+      }
+    }
+
+    renderDiagram();
+
+    return () => {
+      active = false;
+    };
+  }, [diagram, elementId]);
+
+  return (
+    <div className="notes-diagram">
+      <h4>{diagram.title || "Concept Diagram"}</h4>
+
+      {svg ? (
+        <div
+          className="notes-diagram-svg"
+          dangerouslySetInnerHTML={{ __html: svg }}
+        />
+      ) : error ? (
+        <p className="diagram-error">
+          This diagram could not be rendered. The remaining notes are
+          still available.
+        </p>
+      ) : (
+        <p className="diagram-loading">Preparing diagram...</p>
+      )}
+
+      {diagram.caption && (
+        <p className="diagram-caption">{diagram.caption}</p>
+      )}
+    </div>
+  );
+}
+
+function DetailList({ title, items }) {
+  if (!items?.length) return null;
+
+  return (
+    <div className="notes-detail-group">
+      <h4>{title}</h4>
+      <ul>
+        {items.map((item, index) => (
+          <li key={index}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function ComparisonTable({ comparison }) {
+  if (!comparison?.columns?.length || !comparison?.rows?.length) {
+    return null;
+  }
+
+  return (
+    <div className="notes-comparison">
+      <h4>{comparison.title || "Comparison"}</h4>
+      <div className="comparison-scroll">
+        <table>
+          <thead>
+            <tr>
+              {comparison.columns.map((column, index) => (
+                <th key={index}>{column}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {comparison.rows.map((row, rowIndex) => (
+              <tr key={rowIndex}>
+                {row.map((cell, cellIndex) => (
+                  <td key={cellIndex}>{cell}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 export default function GeneratedNotes() {
-
-  
   const location = useLocation();
-
   const data = location.state;
   const notes = data?.notes;
 
@@ -88,12 +217,12 @@ export default function GeneratedNotes() {
 
   const topic = data.topic || notes.title || "Generated Notes";
   const isLecture = data.mode === "lecture";
-
   const transcriptSegments = data.segments || [];
-
   const importantPoints = isLecture
     ? detectImportantPoints(transcriptSegments)
     : [];
+
+  const readiness = calculateReadiness(notes);
 
   const metadata = {
     topic,
@@ -109,14 +238,29 @@ export default function GeneratedNotes() {
     notes.summary || "",
     "",
     "KEY POINTS",
-    ...(notes.keyPoints || []).map((point) => `• ${point}`),
+    ...(notes.keyPoints || []).map((point) => `- ${point}`),
     "",
     "DETAILED NOTES",
     ...(notes.sections || []).flatMap((section) => [
       section.heading || "",
+      section.definition ? `Definition: ${section.definition}` : "",
       section.content || "",
-      ...(section.bullets || []).map((bullet) => `• ${bullet}`),
-      ...(section.examples || []).map((example) => `Example: ${example}`),
+      ...(section.bullets || []).map((item) => `- ${item}`),
+      ...(section.types || []).map((item) => `Type: ${item}`),
+      ...(section.working || []).map((item) => `Step: ${item}`),
+      ...(section.examples || []).map((item) => `Example: ${item}`),
+      ...(section.advantages || []).map((item) => `Advantage: ${item}`),
+      ...(section.disadvantages || []).map((item) => `Disadvantage: ${item}`),
+      ...(section.applications || []).map((item) => `Application: ${item}`),
+      ...(section.formula || []).map((item) => `Formula: ${item}`),
+      "",
+    ]),
+    "CONCEPT–EXAMPLE PAIRING",
+    ...(notes.conceptExamples || []).flatMap((item) => [
+      `Concept: ${item.concept}`,
+      item.explanation || "",
+      `Example: ${item.example || ""}`,
+      item.connection || "",
       "",
     ]),
     "KEYWORDS",
@@ -124,7 +268,7 @@ export default function GeneratedNotes() {
     "",
     "QUICK REVISION",
     ...(Array.isArray(notes.revision)
-      ? notes.revision.map((point) => `• ${point}`)
+      ? notes.revision
       : [notes.revision || ""]),
     "",
     "SELF-ASSESSMENT",
@@ -194,7 +338,28 @@ export default function GeneratedNotes() {
             </button>
           </section>
 
-          {/* Export buttons */}
+          <section className="notes-readiness">
+            <div className="readiness-icon">
+              <Award size={25} />
+            </div>
+            <div className="readiness-content">
+              <div className="readiness-heading">
+                <h2>Revision Readiness</h2>
+                <strong>{readiness}%</strong>
+              </div>
+              <div className="readiness-track">
+                <div
+                  className="readiness-fill"
+                  style={{ width: `${readiness}%` }}
+                />
+              </div>
+              <p>
+                Based on the completeness of your generated study material.
+                This is not a measure of your actual exam readiness.
+              </p>
+            </div>
+          </section>
+
           <div className="notes-export-buttons">
             <button type="button" onClick={handlePDF}>
               <Download size={17} />
@@ -230,48 +395,103 @@ export default function GeneratedNotes() {
           <section className="notes-section">
             <div className="notes-section-heading">
               <FileText size={21} />
-              <h2>Detailed Notes</h2>
+              <h2>Detailed Study Notes</h2>
             </div>
 
             <div className="notes-content">
               {(notes.sections || []).map((section, index) => (
                 <article className="notes-article" key={index}>
                   <h3>{section.heading}</h3>
-                  <p>{section.content}</p>
 
-                  {section.bullets?.length > 0 && (
-                    <ul>
-                      {section.bullets.map((bullet, i) => (
-                        <li key={i}>{bullet}</li>
-                      ))}
-                    </ul>
+                  {section.definition && (
+                    <div className="notes-definition">
+                      <strong>Definition</strong>
+                      <p>{section.definition}</p>
+                    </div>
                   )}
 
-                  {section.examples?.length > 0 && (
-                    <>
-                      <h4>Examples</h4>
-                      <ul>
-                        {section.examples.map((example, i) => (
-                          <li key={i}>{example}</li>
-                        ))}
-                      </ul>
-                    </>
-                  )}
+                  {section.content && <p>{section.content}</p>}
+
+                  <DetailList title="Key Characteristics" items={section.bullets} />
+                  <DetailList title="Types / Classification" items={section.types} />
+                  <DetailList title="Working / Steps" items={section.working} />
+                  <DetailList title="Examples" items={section.examples} />
+                  <DetailList title="Advantages" items={section.advantages} />
+                  <DetailList title="Disadvantages" items={section.disadvantages} />
+                  <DetailList title="Applications" items={section.applications} />
+                  <DetailList title="Formulas" items={section.formula} />
+
+                  <ComparisonTable comparison={section.comparison} />
                 </article>
               ))}
             </div>
           </section>
 
+          {(notes.conceptExamples || []).length > 0 && (
+            <section className="notes-section">
+              <div className="notes-section-heading">
+                <Brain size={21} />
+                <h2>Concept–Example Pairing</h2>
+              </div>
+
+              <p className="section-description">
+                Understand important concepts through relevant examples.
+              </p>
+
+              <div className="concept-example-grid">
+                {notes.conceptExamples.map((item, index) => (
+                  <article className="concept-example-card" key={index}>
+                    <span className="concept-number">
+                      CONCEPT {index + 1}
+                    </span>
+                    <h3>{item.concept}</h3>
+                    <p>{item.explanation}</p>
+                    <div className="concept-example">
+                      <strong>Example</strong>
+                      <p>{item.example}</p>
+                    </div>
+                    {item.connection && (
+                      <p className="concept-connection">
+                        <strong>Why it fits:</strong> {item.connection}
+                      </p>
+                    )}
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {(notes.diagrams || []).length > 0 && (
+            <section className="notes-section">
+              <div className="notes-section-heading">
+                <Network size={21} />
+                <h2>Diagrams and Visual Explanations</h2>
+              </div>
+
+              <p className="section-description">
+                Visual representations of important concepts and processes.
+              </p>
+
+              <div className="notes-diagrams-list">
+                {notes.diagrams.map((diagram, index) => (
+                  <MermaidDiagram diagram={diagram} key={index} />
+                ))}
+              </div>
+            </section>
+          )}
+
           <section className="notes-section">
             <div className="notes-section-heading">
-              <Lightbulb size={21} />
+              <Sparkles size={21} />
               <h2>Important Keywords</h2>
             </div>
-            <ul className="notes-key-list">
+            <div className="notes-keyword-list">
               {(notes.keywords || []).map((word, index) => (
-                <li key={index}>{word}</li>
+                <span className="notes-keyword" key={index}>
+                  {word}
+                </span>
               ))}
-            </ul>
+            </div>
           </section>
 
           <section className="notes-section">
