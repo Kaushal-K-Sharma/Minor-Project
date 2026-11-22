@@ -1,195 +1,552 @@
 
 import json
 import os
+import re
 import time
 
 from google import genai
 
 
-def generate_study_notes(topic, subtopic="", level="beginner"):
+def parse_gemini_json(response_text):
+    """Extract a JSON object from Gemini's response."""
+
+    if not response_text or not response_text.strip():
+        raise ValueError("Gemini returned an empty response.")
+
+    cleaned = response_text.strip()
+
+    cleaned = re.sub(
+        r"^```(?:json)?\s*",
+        "",
+        cleaned,
+        flags=re.IGNORECASE
+    )
+    cleaned = re.sub(r"\s*```$", "", cleaned)
+
+    try:
+        result = json.loads(cleaned)
+        if isinstance(result, dict):
+            return result
+    except json.JSONDecodeError:
+        pass
+
+    decoder = json.JSONDecoder()
+
+    for index, character in enumerate(cleaned):
+        if character == "{":
+            try:
+                result, _ = decoder.raw_decode(cleaned[index:])
+                if isinstance(result, dict):
+                    return result
+            except json.JSONDecodeError:
+                continue
+
+    print("GEMINI RAW RESPONSE PREVIEW:")
+    print(cleaned[:3000])
+
+    raise ValueError(
+        "Gemini returned incomplete or invalid JSON. Please try again."
+    )
+
+
+def generate_study_notes(
+    topic,
+    subtopic="",
+    level="beginner",
+    learning_style="structured",
+    nlp_analysis=None,
+    source_type="study"
+):
+    """
+    Generate adaptive academic notes using Gemini.
+
+    learning_style:
+        structured = exam-oriented notes
+        guided = teacher-like guided explanations
+
+    source_type:
+        study = topic-based learning
+        lecture = notes grounded in a lecture transcript
+    """
+
     api_key = os.getenv("GEMINI_API_KEY")
     model = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 
     if not api_key:
         raise ValueError(
-            "Gemini API key is missing. Add GEMINI_API_KEY to backend .env."
+            "Gemini API key is missing. Check your backend .env file."
         )
 
-    if not topic or not topic.strip():
-        raise ValueError("Please provide a topic.")
+    if not isinstance(topic, str) or not topic.strip():
+        raise ValueError("Please provide a valid topic.")
 
-    level_instructions = {
-        "beginner": (
-            "Use simple language, explain technical terms, and build "
-            "understanding from the basics. Include relatable examples."
-        ),
-        "intermediate": (
-            "Give detailed academic explanations, practical examples, "
-            "technical terminology, and relevant comparisons."
-        ),
-        "advanced": (
-            "Give technically detailed explanations, deeper concepts, "
-            "algorithms, limitations, formulas, and advanced examples."
-        ),
-    }
+    level = str(level).lower().strip()
+    learning_style = str(learning_style).lower().strip()
+    source_type = str(source_type).lower().strip()
 
-    level = level.lower().strip()
-    if level not in level_instructions:
+    if level not in ["beginner", "intermediate", "advanced"]:
         raise ValueError("Invalid learning level.")
 
-    client = genai.Client(api_key=api_key)
+    if learning_style not in ["structured", "guided"]:
+        raise ValueError("Invalid learning style.")
 
-    prompt = f"""
-You are an experienced university professor, subject expert,
-and academic study-material writer.
+    if source_type not in ["study", "lecture"]:
+        raise ValueError("Invalid source type.")
 
-Create COMPLETE, HIGH-QUALITY STUDY NOTES that a university student
-can genuinely study from and use for exam preparation.
+    # --------------------------------------------------
+    # DIFFICULTY LEVEL
+    # --------------------------------------------------
 
-TOPIC: {topic}
-SUBTOPIC: {subtopic if subtopic else "Cover the important subtopics of this topic."}
-LEARNING LEVEL: {level}
+    level_instructions = {
+        "beginner": """
+Assume the student is new to the topic.
 
-LEARNING LEVEL INSTRUCTIONS:
-{level_instructions[level]}
+Start with intuitive explanations and familiar language.
+Introduce technical terms gradually and explain them.
+Use simple examples before formal or complex explanations.
+Do not remove important academic concepts merely to simplify them.
+""",
 
-CONTENT QUALITY RULES:
-1. Be factually accurate, specific, educational, and sufficiently detailed.
-2. Do not give generic filler or repeat the same point in different words.
-3. Organize the material from fundamentals to advanced ideas.
-4. Explain technical terms when they first appear.
-5. Use meaningful headings and logical subtopics.
-6. Include relevant examples, preferably practical or real-world examples.
-7. Use comparison tables when concepts are commonly confused or compared.
-8. Include advantages, disadvantages, applications, types, and limitations
-   whenever they are relevant to the topic.
-9. Include formulas only when relevant. Explain every symbol.
-10. For algorithms or processes, explain the steps in correct order.
-11. Do not force irrelevant sections into a topic.
-12. Avoid unsupported claims. If a detail is uncertain, do not invent it.
-13. Make the notes useful for learning, not just quick revision.
+        "intermediate": """
+Assume the student knows basic concepts but needs a proper
+understanding of the topic.
 
-GENERATE THE FOLLOWING:
+Use accurate technical terminology, detailed explanations,
+relevant examples, comparisons and academic concepts.
+Explain relationships between concepts.
+""",
 
-A. SUMMARY
-A concise but informative overview of the complete topic.
+        "advanced": """
+Assume the student already understands the fundamentals.
 
-B. KEY POINTS
-Provide 6 to 10 meaningful and non-repetitive points.
+Include deeper technical details, formal definitions,
+mathematical reasoning, algorithms, limitations and advanced
+applications wherever relevant.
 
-C. DETAILED NOTES
-Create approximately 4 to 8 well-developed sections, depending on
-the topic's complexity. Each section should use the relevant fields:
-- heading
-- definition
-- content
-- bullets
-- examples
-- types
-- working
-- advantages
-- disadvantages
-- applications
-- formula
-- comparison
+Do not spend excessive space explaining basic concepts.
+"""
+    }
 
-Use empty strings or empty arrays for fields that are not relevant.
-Do not force every field into every section.
+    # --------------------------------------------------
+    # LEARNING STYLE
+    # --------------------------------------------------
 
-For comparisons, use:
-"comparison": {{
-  "title": "Comparison title",
-  "columns": ["Aspect", "Concept A", "Concept B"],
-  "rows": [
-    ["Meaning", "Explanation A", "Explanation B"]
-  ]
-}}
+    if learning_style == "structured":
 
-D. CONCEPT-EXAMPLE PAIRING
-Provide 3 to 5 important concepts and a relevant example for each.
-Explain briefly why the example demonstrates the concept.
+        style_instructions = """
+LEARNING STYLE: STRUCTURED NOTES
 
-E. DIAGRAMS
-Suggest exactly 2 educational diagrams when the topic supports them.
-Each diagram must be a valid Mermaid flowchart using simple syntax.
-Choose diagrams that genuinely explain important concepts, processes,
-architectures, classifications, or relationships from the notes.
+Create exam-oriented, well-organized academic notes.
 
-Use this structure:
-{{
-  "title": "Diagram title",
-  "caption": "What the diagram explains",
-  "mermaid": "flowchart TD; A[Input] --> B[Process] --> C[Output]"
-}}
+The purpose is to make information easy to locate, revise
+and remember.
 
-Do not include images, external URLs, HTML, or Markdown fences.
-If a meaningful diagram is not suitable, return an empty array.
+Prefer:
+- Clear headings and subheadings.
+- Concise definitions.
+- Important points and bullet lists.
+- Classification and types.
+- Advantages and disadvantages.
+- Applications.
+- Formulas and algorithms.
+- Comparison tables.
+- Short, relevant examples.
+- Quick revision points.
 
-F. KEYWORDS
-Provide 6 to 12 important technical keywords.
+Use paragraphs when an explanation requires them, but do not
+turn the entire document into long continuous prose.
 
-G. QUICK REVISION
-Provide 6 to 10 concise revision points.
+Keep the notes comprehensive enough for university study,
+but make revision convenient.
+"""
 
-H. SELF-ASSESSMENT
-Provide 5 useful questions with accurate answers.
-Include a mix of conceptual, descriptive, and application-based questions.
+    else:
 
-RETURN ONLY VALID JSON with this exact structure:
+        style_instructions = """
+LEARNING STYLE: GUIDED TEACHING EXPLANATION
 
-{{
-  "title": "Study notes title",
-  "summary": "Informative summary",
-  "keyPoints": ["point 1", "point 2"],
+Create carefully prepared teaching material similar to
+a knowledgeable university teacher explaining a subject
+to a student.
+
+This is NOT ordinary structured notes with longer paragraphs.
+It must have a clearly different teaching experience.
+
+TEACHING FLOW:
+
+1. Begin with a meaningful introduction that explains what
+   the topic is and why it matters.
+
+2. Give the student a short list of learning objectives.
+
+3. Divide the subject into a logical sequence of concepts.
+   Teach prerequisites before dependent concepts.
+
+4. Begin each concept with an intuitive explanation.
+   Then introduce its technical meaning or formal definition
+   when appropriate.
+
+5. Explain WHY a concept works and HOW it works, not merely
+   what it means.
+
+6. Use short, connected paragraphs with natural transitions.
+   Avoid excessive bullet points and enormous text blocks.
+
+7. Introduce examples immediately after the concept they explain.
+
+8. Use step-by-step worked examples when the subject requires
+   calculations, algorithms, derivations, state transitions,
+   transformations or procedures.
+
+9. Explain every important symbol, variable, notation or
+   technical term when it first appears.
+
+10. Connect each section to the next so the student develops
+    a complete mental model of the subject.
+
+11. End each major section with a concise takeaway when useful.
+
+12. Finish with a meaningful recap, important terminology
+    and self-assessment questions.
+
+ADAPTIVE TEACHING — EXTREMELY IMPORTANT:
+
+Do NOT use a fixed template for every subject.
+
+First identify the nature of the topic and decide which
+teaching methods are actually useful.
+
+Examples:
+
+- Theoretical computer science:
+  formal definitions, notation, state diagrams, derivations,
+  transition tables and step-by-step machine execution.
+
+- Database concepts:
+  sample tables, before-and-after transformations,
+  functional dependencies, normalization examples and comparisons.
+
+- Mathematics and statistics:
+  intuition, equations, symbol explanations, calculations,
+  worked numerical examples and interpretation.
+
+- Algorithms and programming:
+  problem explanation, logic, pseudocode, step-by-step execution,
+  code examples and complexity analysis.
+
+- Machine learning:
+  intuition, workflow, mathematical foundations, examples,
+  model behaviour, evaluation and limitations.
+
+- Networking and computer architecture:
+  components, architecture diagrams, data flow, protocols
+  and practical scenarios.
+
+These are examples, not mandatory templates.
+Select only the elements that genuinely help explain the topic.
+
+Do not force every section to contain a formula, table,
+diagram, algorithm, advantages or disadvantages.
+
+If an element is not relevant, omit it.
+
+CONTENT DEPTH:
+
+The student should be able to understand the covered topic
+from the notes without searching elsewhere for basic explanations.
+
+Do not sacrifice technical correctness for simplicity.
+Preserve important formal details while explaining them clearly.
+
+Avoid filler, repetitive introductions, generic statements
+and unnecessary motivational language.
+"""
+
+    # --------------------------------------------------
+    # SOURCE-GROUNDING INSTRUCTIONS
+    # --------------------------------------------------
+
+    if source_type == "lecture":
+
+        source_instructions = """
+SOURCE TYPE: LECTURE TRANSCRIPT
+
+The provided source contains a lecturer's spoken explanation.
+
+The transcript is the primary source for these notes.
+
+SOURCE-GROUNDING RULES:
+
+1. Preserve the lecturer's important concepts, explanations,
+   examples, definitions and emphasis.
+
+2. Give appropriate priority to concepts identified by NLP
+   keyword extraction and important-sentence ranking.
+
+3. Correctly organize spoken explanations into readable
+   academic teaching material.
+
+4. Remove speech disfluencies and repetition without removing
+   meaningful information.
+
+5. Do not invent an example and claim the lecturer gave it.
+
+6. Do not attribute a definition, opinion or explanation
+   to the lecturer unless the source supports it.
+
+7. You may add background explanations to make difficult
+   concepts understandable. However, clearly distinguish
+   additional clarification from lecture-derived material.
+
+8. Do not silently replace the lecturer's explanation
+   with an unrelated textbook treatment.
+
+9. If the transcript is unclear or incomplete, do not invent
+   missing lecture details.
+
+10. Retain important lecturer-specific examples and emphasis.
+
+The notes should be a faithful, well-organized educational
+version of the lecture, not a generic essay about the topic.
+"""
+
+    else:
+
+        source_instructions = """
+SOURCE TYPE: TOPIC-BASED STUDY
+
+Create educational material using reliable subject knowledge.
+
+Explain the topic comprehensively at the selected learning level.
+Use relevant examples, formal concepts and supporting explanations.
+
+Do not invent references, research findings or specific facts.
+"""
+
+    # --------------------------------------------------
+    # NLP ANALYSIS
+    # --------------------------------------------------
+
+    nlp_context = ""
+
+    if isinstance(nlp_analysis, dict) and nlp_analysis:
+
+        keywords = nlp_analysis.get("keywords", [])
+        important_sentences = nlp_analysis.get(
+            "important_sentences", []
+        )
+        sentence_count = nlp_analysis.get("sentence_count", 0)
+        methods = nlp_analysis.get("analysis_method", [])
+
+        nlp_context = f"""
+NLP ANALYSIS:
+
+Sentence count: {sentence_count}
+
+Extracted important terms:
+{json.dumps(keywords, ensure_ascii=False)}
+
+Important sentences:
+{json.dumps(important_sentences, ensure_ascii=False)}
+
+Techniques used:
+{json.dumps(methods, ensure_ascii=False)}
+
+Use this analysis as guidance for identifying important
+concepts and organizing the material.
+
+Do not blindly copy ranked sentences.
+Do not assume frequent words are automatically important.
+Do not treat NLP output as proof that a statement is correct.
+"""
+
+    # --------------------------------------------------
+    # CONTENT SCHEMA
+    # --------------------------------------------------
+
+    output_structure = """
+{
+  "title": "Title",
+  "learningStyle": "structured or guided",
+  "introduction": "Introduction to the topic",
+  "learningObjectives": [
+    "Learning objective"
+  ],
+  "summary": "Topic summary",
+  "keyPoints": [
+    "Important point"
+  ],
   "sections": [
-    {{
+    {
       "heading": "Section heading",
-      "definition": "Relevant definition",
-      "content": "Detailed explanation",
-      "bullets": ["detail 1", "detail 2"],
-      "examples": ["Relevant example"],
-      "types": ["Type and explanation"],
-      "working": ["Step 1", "Step 2"],
-      "advantages": ["Advantage"],
-      "disadvantages": ["Disadvantage"],
-      "applications": ["Application"],
-      "formula": ["Formula and explanation"],
-      "comparison": {{
+      "purpose": "Why this concept matters",
+      "definition": "Formal definition when relevant",
+      "content": "Main explanation",
+      "bullets": [],
+      "examples": [],
+      "types": [],
+      "working": [],
+      "advantages": [],
+      "disadvantages": [],
+      "applications": [],
+      "formula": [],
+      "workedExample": "",
+      "formalDetails": [],
+      "analogy": "",
+      "takeaway": "",
+      "comparison": {
         "title": "",
         "columns": [],
         "rows": []
-      }}
-    }}
+      }
+    }
   ],
   "conceptExamples": [
-    {{
-      "concept": "Concept name",
-      "explanation": "What the concept means",
-      "example": "Relevant example",
-      "connection": "Why the example demonstrates the concept"
-    }}
+    {
+      "concept": "Concept",
+      "explanation": "Explanation",
+      "example": "Example",
+      "connection": "Why this example demonstrates the concept"
+    }
   ],
   "diagrams": [
-    {{
+    {
       "title": "Diagram title",
       "caption": "Diagram explanation",
-      "mermaid": "flowchart TD; A[Start] --> B[Process]"
-    }}
+      "mermaid": "flowchart TD; A[Start] --> B[End]"
+    }
   ],
-  "keywords": ["keyword 1"],
-  "revision": ["revision point 1"],
+  "keywords": [
+    "Important term"
+  ],
+  "glossary": [
+    {
+      "term": "Technical term",
+      "meaning": "Simple explanation"
+    }
+  ],
+  "revision": [
+    "Revision point"
+  ],
+  "recap": "Final connected recap of the topic",
   "questions": [
-    {{
+    {
       "question": "Question",
-      "answer": "Detailed but concise answer"
-    }}
+      "answer": "Answer"
+    }
   ]
-}}
-
-Return valid JSON only. Do not use Markdown code fences.
+}
 """
 
-    print(f"Using Gemini model: {model}")
+    # --------------------------------------------------
+    # GENERATION PROMPT
+    # --------------------------------------------------
+
+    prompt = f"""
+You are an experienced university professor and academic
+learning-material designer.
+
+Your task is to create high-quality university-level study notes.
+
+TOPIC:
+{topic}
+
+ADDITIONAL TOPIC OR SOURCE MATERIAL:
+{subtopic if subtopic else "No additional material supplied."}
+
+LEARNING LEVEL:
+{level}
+
+{level_instructions[level]}
+
+{style_instructions}
+
+{source_instructions}
+
+{nlp_context}
+
+GENERAL CONTENT RULES:
+
+- Be accurate and specific.
+- Organize concepts in a logical learning sequence.
+- Explain technical vocabulary.
+- Avoid generic filler and repetition.
+- Use examples that genuinely demonstrate the concept.
+- Include important academic details.
+- Do not invent facts or unsupported claims.
+- Adapt the number and type of sections to the topic.
+- Do not force irrelevant content into the notes.
+
+GUIDED STYLE ADDITIONAL RULES:
+
+When the selected style is guided:
+
+- The introduction should create a clear starting point.
+- Learning objectives should describe what the student will understand.
+- Sections should teach concepts in a meaningful order.
+- The content field should contain connected explanations.
+- Use workedExample for a genuine step-by-step example.
+- Use formalDetails for relevant notation, definitions or rules.
+- Use comparison only when comparison improves understanding.
+- Use diagrams only when a visual relationship is useful.
+- Use takeaway to reinforce the central idea of a section.
+- Include a glossary of important technical terms.
+- Write a connected recap rather than repeating the summary.
+
+STRUCTURED STYLE ADDITIONAL RULES:
+
+When the selected style is structured:
+
+- Prioritize organized reference material.
+- Keep definitions and points concise.
+- Use relevant tables, lists, formulas and classifications.
+- Do not force a long teaching narrative.
+- Introduction, learningObjectives, glossary and recap may be
+  concise or empty if they do not add value.
+
+ADAPTIVE SECTION PLANNING:
+
+Before writing, internally determine:
+1. What kind of subject is this?
+2. What prerequisites should be explained?
+3. Which concepts are central?
+4. Which examples would make the concepts understandable?
+5. Does the topic need formulas, tables, diagrams, algorithms,
+   derivations, state transitions or before-and-after examples?
+6. Which of those elements are actually relevant?
+
+Do not include this planning in the final response.
+Use it to produce the best teaching structure.
+
+OUTPUT REQUIREMENTS:
+
+Return one valid JSON object using this structure:
+
+{output_structure}
+
+IMPORTANT FIELD RULES:
+
+- Keep all listed legacy fields in every section.
+- Use empty strings or empty arrays when a field is irrelevant.
+- comparison must always be an object with title, columns and rows.
+- workedExample, formalDetails, analogy and takeaway are additional fields.
+- diagrams must contain valid Mermaid flowchart syntax.
+- Do not put Markdown fences around the JSON.
+- Do not add explanations outside the JSON.
+- Ensure all strings are correctly escaped.
+- Return complete JSON, not a truncated response.
+"""
+
+    # --------------------------------------------------
+    # GEMINI REQUEST
+    # --------------------------------------------------
+
+    client = genai.Client(api_key=api_key)
+
+    print(f"Using Gemini model: {model}", flush=True)
+    print(f"Learning style: {learning_style}", flush=True)
+    print(f"Learning level: {level}", flush=True)
+    print(f"Source type: {source_type}", flush=True)
 
     response = None
 
@@ -198,11 +555,15 @@ Return valid JSON only. Do not use Markdown code fences.
             response = client.models.generate_content(
                 model=model,
                 contents=prompt,
-                config={"response_mime_type": "application/json"},
+                config={
+                    "response_mime_type": "application/json"
+                }
             )
+
             break
 
         except Exception as error:
+
             error_message = str(error)
             error_lower = error_message.lower()
 
@@ -215,20 +576,28 @@ Return valid JSON only. Do not use Markdown code fences.
             ):
                 raise RuntimeError(
                     "GEMINI_DAILY_QUOTA_EXCEEDED: "
-                    "Gemini's daily API quota has been exhausted. "
-                    "Please try again after the quota resets."
+                    "Gemini daily quota exhausted."
                 ) from error
 
-            if "429" in error_message or "RESOURCE_EXHAUSTED" in error_message:
+            if (
+                "429" in error_message
+                or "RESOURCE_EXHAUSTED" in error_message
+            ):
                 raise RuntimeError(
-                    "GEMINI_RATE_LIMIT: Gemini API rate limit reached. "
-                    "Please wait before trying again."
+                    "GEMINI_RATE_LIMIT: "
+                    "Gemini rate limit reached. Please wait and retry."
                 ) from error
 
-            if "503" in error_message or "UNAVAILABLE" in error_message:
+            if (
+                "503" in error_message
+                or "UNAVAILABLE" in error_message
+            ):
                 if attempt < 2:
                     wait_time = 2 ** (attempt + 1)
-                    print(f"Gemini unavailable. Retrying in {wait_time}s...")
+                    print(
+                        f"Gemini unavailable. Retrying in {wait_time}s.",
+                        flush=True
+                    )
                     time.sleep(wait_time)
                     continue
 
@@ -237,12 +606,11 @@ Return valid JSON only. Do not use Markdown code fences.
     if response is None or not response.text:
         raise RuntimeError("Gemini returned an empty response.")
 
-    try:
-        notes = json.loads(response.text)
-    except json.JSONDecodeError as error:
-        raise ValueError(
-            "Gemini returned invalid JSON. Please try again."
-        ) from error
+    # --------------------------------------------------
+    # PARSE AND VALIDATE
+    # --------------------------------------------------
+
+    notes = parse_gemini_json(response.text)
 
     required_fields = [
         "title",
@@ -253,35 +621,84 @@ Return valid JSON only. Do not use Markdown code fences.
         "diagrams",
         "keywords",
         "revision",
-        "questions",
+        "questions"
     ]
 
     for field in required_fields:
         if field not in notes:
-            raise ValueError(f"AI response is missing the {field} field.")
+            raise ValueError(
+                f"AI response is missing the {field} field."
+            )
 
-    # Ensure optional collections always have predictable types.
-    for field in [
-        "keyPoints", "sections", "conceptExamples",
-        "diagrams", "keywords", "revision", "questions"
-    ]:
-        if not isinstance(notes[field], list):
+    list_fields = [
+        "keyPoints",
+        "sections",
+        "conceptExamples",
+        "diagrams",
+        "keywords",
+        "revision",
+        "questions",
+        "learningObjectives",
+        "glossary"
+    ]
+
+    for field in list_fields:
+        if not isinstance(notes.get(field), list):
             notes[field] = []
 
+    for field in [
+        "introduction",
+        "recap",
+        "summary",
+        "title"
+    ]:
+        if not isinstance(notes.get(field), str):
+            notes[field] = ""
+
+    # Ensure backward-compatible section structure.
     for section in notes["sections"]:
+
+        if not isinstance(section, dict):
+            continue
+
         for field in [
-            "bullets", "examples", "types", "working",
-            "advantages", "disadvantages", "applications", "formula"
+            "bullets",
+            "examples",
+            "types",
+            "working",
+            "advantages",
+            "disadvantages",
+            "applications",
+            "formula",
+            "formalDetails"
         ]:
             if not isinstance(section.get(field), list):
                 section[field] = []
+
+        for field in [
+            "heading",
+            "purpose",
+            "definition",
+            "content",
+            "workedExample",
+            "analogy",
+            "takeaway"
+        ]:
+            if not isinstance(section.get(field), str):
+                section[field] = ""
 
         if not isinstance(section.get("comparison"), dict):
             section["comparison"] = {
                 "title": "",
                 "columns": [],
-                "rows": [],
+                "rows": []
             }
 
-    print(f"Successfully generated notes using {model}")
+    notes["learningStyle"] = learning_style
+
+    print(
+        f"Successfully generated {learning_style} notes.",
+        flush=True
+    )
+
     return notes

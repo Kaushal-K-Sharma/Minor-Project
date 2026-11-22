@@ -9,6 +9,7 @@ from pathlib import Path
 from werkzeug.utils import secure_filename
 from services.transcription import transcribe_file
 from services.note_generator import generate_study_notes
+from services.nlp_processor import analyze_text
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -173,6 +174,7 @@ def not_found(error):
 # STUDY MODE
 # --------------------------------------------------
 
+
 @app.route("/api/study/generate", methods=["POST"])
 def study_generate():
     try:
@@ -181,6 +183,9 @@ def study_generate():
         topic = str(data.get("topic", "")).strip()
         subtopic = str(data.get("subtopic", "")).strip()
         level = str(data.get("level", "beginner")).lower().strip()
+        learning_style = str(
+            data.get("learning_style", "structured")
+        ).lower().strip()
 
         if not topic:
             return jsonify({"error": "Please provide a topic."}), 400
@@ -193,7 +198,32 @@ def study_generate():
         if level not in ["beginner", "intermediate", "advanced"]:
             return jsonify({"error": "Invalid learning level."}), 400
 
-        notes = generate_study_notes(topic, subtopic, level)
+        if learning_style not in ["structured", "guided"]:
+            return jsonify({"error": "Invalid learning style."}), 400
+
+        # Step 1: Prepare text for NLP analysis.
+        source_text = topic
+
+        if subtopic:
+            source_text += ". " + subtopic
+
+        # Step 2: Perform NLP analysis.
+        nlp_analysis = analyze_text(source_text)
+
+        print(
+            "Study NLP analysis completed:",
+            nlp_analysis["sentence_count"],
+            "sentences"
+        )
+
+        # Step 3: Generate notes using Gemini and NLP results.
+        notes = generate_study_notes(
+            topic=topic,
+            subtopic=subtopic,
+            level=level,
+            learning_style=learning_style,
+            nlp_analysis=nlp_analysis
+        )
 
         job_id = uuid.uuid4().hex
 
@@ -204,6 +234,7 @@ def study_generate():
             "topic": topic,
             "subtopic": subtopic,
             "level": level,
+            "learning_style": learning_style,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "notes": notes
         }
@@ -225,6 +256,7 @@ def study_generate():
 # --------------------------------------------------
 # LECTURE MODE - UPLOAD AND TRANSCRIBE
 # --------------------------------------------------
+
 
 @app.route("/api/lecture/process", methods=["POST"])
 def process_lecture():
@@ -249,22 +281,22 @@ def process_lecture():
                 "error": "Only MP3, WAV, MP4 and MOV files are supported."
             }), 400
 
-        # Save uploaded file temporarily
+        # Save uploaded file temporarily.
         unique_name = f"{uuid.uuid4().hex}{extension}"
         file_path = UPLOAD_DIR / unique_name
         uploaded_file.save(file_path)
 
         print(f"Lecture received: {original_name}", flush=True)
 
-        # Step 1: Speech-to-text
+        # Step 1: Convert speech into text.
         transcription = transcribe_file(file_path)
 
         transcript = transcription["transcript"]
 
-        # Step 2: Create a unique job ID
+        # Step 2: Create a unique job ID.
         job_id = uuid.uuid4().hex
 
-        # Step 3: Save transcript BEFORE calling Gemini
+        # Step 3: Save transcript BEFORE NLP and Gemini processing.
         lecture_data = {
             "job_id": job_id,
             "status": "transcribed",
@@ -276,24 +308,45 @@ def process_lecture():
             "language": transcription["language"],
             "transcript": transcript,
             "segments": transcription["segments"],
+            "learning_style": "guided",
             "notes": None
         }
 
         save_lecture_data(job_id, lecture_data)
         transcript_saved = True
 
-        print(f"Transcript saved successfully. Job ID: {job_id}")
-
-        # Step 4: Generate notes
-        notes = generate_study_notes(
-            topic=Path(original_name).stem,
-            subtopic=create_lecture_prompt(transcript),
-            level="intermediate"
+        print(
+            f"Transcript saved successfully. Job ID: {job_id}",
+            flush=True
         )
 
-        # Step 5: Save generated notes too
+        # Step 4: Analyse the lecture transcript using NLP.
+        nlp_analysis = analyze_text(transcript)
+
+        print(
+            "Lecture NLP analysis completed:",
+            nlp_analysis["sentence_count"],
+            "sentences",
+            flush=True
+        )
+
+        # Step 5: Prepare lecture content for Gemini.
+        lecture_prompt = create_lecture_prompt(transcript)
+
+        # Step 6: Generate Guided Teaching Notes.
+        notes = generate_study_notes(
+            topic=Path(original_name).stem,
+            subtopic=lecture_prompt,
+            level="intermediate",
+            learning_style="guided",
+            nlp_analysis=nlp_analysis,
+            source_type="lecture"
+        )
+
+        # Step 7: Save generated notes.
         lecture_data["notes"] = notes
         lecture_data["status"] = "completed"
+
         save_lecture_data(job_id, lecture_data)
 
         return jsonify({
@@ -303,9 +356,9 @@ def process_lecture():
         })
 
     except Exception as error:
-        print("Lecture processing error:", str(error))
+        print("Lecture processing error:", str(error), flush=True)
 
-        # If transcription was saved, preserve its job ID
+        # Preserve the transcript if note generation fails.
         if transcript_saved and job_id:
             return handle_generation_error(
                 error,
@@ -324,22 +377,26 @@ def process_lecture():
         }), 500
 
     finally:
-        # Remove temporary upload, not the saved transcript
+        # Remove temporary upload, not the saved transcript.
         if file_path and file_path.exists():
             try:
                 file_path.unlink()
             except OSError:
-                print("Warning: Could not remove temporary uploaded file.")
+                print(
+                    "Warning: Could not remove temporary uploaded file.",
+                    flush=True
+                )
 
 
 # --------------------------------------------------
-# LECTURE MODE - RETRY NOTE GENERATION
+# LECTURE MODE - RETRY NOTEs GENERATION
 # --------------------------------------------------
+
 
 @app.route("/api/lecture/retry-notes/<job_id>", methods=["POST"])
 def retry_lecture_notes(job_id):
 
-    # Validate ID to prevent unsafe file paths
+    # Validate ID to prevent unsafe file paths.
     if not re.fullmatch(r"[a-f0-9]{32}", job_id):
         return jsonify({"error": "Invalid lecture ID."}), 400
 
@@ -351,7 +408,7 @@ def retry_lecture_notes(job_id):
         }), 404
 
     try:
-        # Load previously saved transcript
+        # Load previously saved transcript.
         with open(transcript_file, "r", encoding="utf-8") as file:
             lecture_data = json.load(file)
 
@@ -362,18 +419,31 @@ def retry_lecture_notes(job_id):
                 "error": "The saved lecture transcript is empty."
             }), 400
 
-        print(f"Retrying note generation for job: {job_id}")
-
-        # Generate notes WITHOUT transcribing again
-        notes = generate_study_notes(
-            topic=lecture_data["topic"],
-            subtopic=create_lecture_prompt(transcript),
-            level="intermediate"
+        print(
+            f"Retrying note generation for job: {job_id}",
+            flush=True
         )
 
-        # Save generated notes
+        # Step 1: Analyse the existing transcript again.
+        nlp_analysis = analyze_text(transcript)
+
+        # Step 2: Prepare lecture content.
+        lecture_prompt = create_lecture_prompt(transcript)
+
+        # Step 3: Generate Guided Teaching Notes.
+        notes = generate_study_notes(
+            topic=lecture_data["topic"],
+            subtopic=lecture_prompt,
+            level="intermediate",
+            learning_style="guided",
+            nlp_analysis=nlp_analysis,
+            source_type="lecture"
+        )
+
+        # Step 4: Save generated notes.
         lecture_data["notes"] = notes
         lecture_data["status"] = "completed"
+        lecture_data["learning_style"] = "guided"
 
         save_lecture_data(job_id, lecture_data)
 
@@ -391,6 +461,8 @@ def retry_lecture_notes(job_id):
                 "transcript_saved": True
             }
         )
+
+
 
 # --------------------------------------------------
 # NOTES HISTORY

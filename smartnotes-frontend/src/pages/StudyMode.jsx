@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -6,6 +7,8 @@ import {
   GraduationCap,
   Lightbulb,
   Rocket,
+  NotebookPen,
+  GraduationCap as GuidedIcon,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import "./StudyMode.css";
@@ -31,12 +34,30 @@ const levels = [
   },
 ];
 
+const learningStyles = [
+  {
+    value: "structured",
+    title: "Structured Notes",
+    description:
+      "Organized notes with headings, bullet points, definitions and examples.",
+    icon: NotebookPen,
+  },
+  {
+    value: "guided",
+    title: "Guided Explanation",
+    description:
+      "Teacher-like explanations that build understanding step by step.",
+    icon: GuidedIcon,
+  },
+];
+
 export default function StudyMode() {
   const navigate = useNavigate();
 
   const [topic, setTopic] = useState("");
   const [subtopic, setSubtopic] = useState("");
   const [level, setLevel] = useState("beginner");
+  const [learningStyle, setLearningStyle] = useState("guided");
   const [error, setError] = useState("");
 
   const handleSubmit = (event) => {
@@ -58,6 +79,7 @@ export default function StudyMode() {
         topic: cleanTopic,
         subtopic: cleanSubtopic,
         level,
+        learning_style: learningStyle,
       },
     });
   };
@@ -87,6 +109,7 @@ export default function StudyMode() {
               <label htmlFor="study-topic">
                 Topic <span className="required">*</span>
               </label>
+
               <input
                 id="study-topic"
                 type="text"
@@ -99,6 +122,7 @@ export default function StudyMode() {
                 maxLength={150}
                 required
               />
+
               <small>Enter the subject you want to study.</small>
             </div>
 
@@ -106,6 +130,7 @@ export default function StudyMode() {
               <label htmlFor="study-subtopic">
                 Subtopic <span className="optional">(Optional)</span>
               </label>
+
               <input
                 id="study-subtopic"
                 type="text"
@@ -114,6 +139,7 @@ export default function StudyMode() {
                 onChange={(event) => setSubtopic(event.target.value)}
                 maxLength={150}
               />
+
               <small>
                 Specify a particular concept if you have one in mind.
               </small>
@@ -123,6 +149,7 @@ export default function StudyMode() {
               <label>
                 Learning level <span className="required">*</span>
               </label>
+
               <p className="study-level-hint">
                 Select the level that suits your understanding.
               </p>
@@ -143,10 +170,54 @@ export default function StudyMode() {
                       <span className="study-level-icon">
                         <Icon size={22} />
                       </span>
+
                       <span className="study-level-text">
                         <strong>{item.title}</strong>
                         <small>{item.description}</small>
                       </span>
+
+                      <span className="study-radio">
+                        {selected && <span />}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="study-form-group">
+              <label>
+                Learning style <span className="required">*</span>
+              </label>
+
+              <p className="study-level-hint">
+                Choose how you want your study material to be presented.
+              </p>
+
+              <div className="study-levels">
+                {learningStyles.map((item) => {
+                  const Icon = item.icon;
+                  const selected = learningStyle === item.value;
+
+                  return (
+                    <button
+                      key={item.value}
+                      type="button"
+                      className={`study-level study-style ${
+                        selected ? "selected" : ""
+                      }`}
+                      onClick={() => setLearningStyle(item.value)}
+                      aria-pressed={selected}
+                    >
+                      <span className="study-level-icon">
+                        <Icon size={22} />
+                      </span>
+
+                      <span className="study-level-text">
+                        <strong>{item.title}</strong>
+                        <small>{item.description}</small>
+                      </span>
+
                       <span className="study-radio">
                         {selected && <span />}
                       </span>

@@ -6,7 +6,8 @@ Step 2. Run This Command in Terminal (npm.cmd run dev).
 Step 3. Copy the URL (http://localhost:5173/) and paste our PC Local browser.  
  for backend
 : 
-.\venv\Scripts\Activate.ps1          
+.\venv\Scripts\Activate.ps1  
+venv\Scripts\activate         
 python app.py
 
 #######

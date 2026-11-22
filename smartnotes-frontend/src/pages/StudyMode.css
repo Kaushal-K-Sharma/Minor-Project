@@ -273,3 +273,23 @@
     height: 38px;
   }
 }
+
+
+/* Learning style selector */
+
+.study-style {
+  min-height: 82px;
+}
+
+.study-style.selected {
+  border-color: var(--primary, #2563eb);
+  background: #eff6ff;
+}
+
+.study-style .study-level-text strong {
+  font-size: 14px;
+}
+
+.study-style .study-level-text small {
+  max-width: 520px;
+}

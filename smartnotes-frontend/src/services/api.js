@@ -51,15 +51,27 @@ export function retryLectureNotes(jobId) {
   );
 }
 
-export function generateStudyNotes({ topic, subtopic, level }) {
+
+export function generateStudyNotes({
+  topic,
+  subtopic,
+  level,
+  learning_style = "guided",
+}) {
   return request("/api/study/generate", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ topic, subtopic, level }),
+    body: JSON.stringify({
+      topic,
+      subtopic,
+      level,
+      learning_style,
+    }),
   });
 }
+
 
 export function getNotesHistory() {
   return request("/api/history");

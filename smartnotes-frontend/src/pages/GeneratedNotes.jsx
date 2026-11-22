@@ -15,6 +15,9 @@ import {
   Brain,
   Network,
   Sparkles,
+  GraduationCap,
+  BookMarked,
+  Target,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import {
@@ -32,7 +35,6 @@ mermaid.initialize({
 function formatTimestamp(seconds = 0) {
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
-
   return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
 }
 
@@ -59,11 +61,9 @@ function detectImportantPoints(segments = []) {
 
   return segments.filter((segment) => {
     const text = segment.text || "";
-
     if (promotionalPatterns.some((pattern) => pattern.test(text))) {
       return false;
     }
-
     return patterns.some((pattern) => pattern.test(text));
   });
 }
@@ -82,8 +82,9 @@ function calculateReadiness(notes) {
     (notes.questions || []).length >= 3,
   ];
 
-  const completed = checks.filter(Boolean).length;
-  return Math.round((completed / checks.length) * 100);
+  return Math.round(
+    (checks.filter(Boolean).length / checks.length) * 100
+  );
 }
 
 function MermaidDiagram({ diagram }) {
@@ -193,6 +194,98 @@ function ComparisonTable({ comparison }) {
   );
 }
 
+function SectionHeading({ children }) {
+  return <h4 className="guided-subheading">{children}</h4>;
+}
+
+function GuidedSection({ section, index }) {
+  return (
+    <article className="guided-article" key={index}>
+      <div className="guided-article-heading">
+        <span className="guided-section-number">
+          {String(index + 1).padStart(2, "0")}
+        </span>
+        <h3>{section.heading || `Topic ${index + 1}`}</h3>
+      </div>
+
+      {section.purpose && (
+        <p className="guided-purpose">{section.purpose}</p>
+      )}
+
+      {section.definition && (
+        <div className="guided-definition">
+          <strong>Formal definition</strong>
+          <p>{section.definition}</p>
+        </div>
+      )}
+
+      {section.content && (
+        <div className="guided-prose">
+          {section.content.split(/\n+/).filter(Boolean).map((paragraph, i) => (
+            <p key={i}>{paragraph}</p>
+          ))}
+        </div>
+      )}
+
+      {section.analogy && (
+        <div className="guided-analogy">
+          <strong><Lightbulb size={16} /> Think of it this way</strong>
+          <p>{section.analogy}</p>
+        </div>
+      )}
+
+      {section.workedExample && (
+        <div className="guided-worked-example">
+          <strong>Worked example</strong>
+          <p>{section.workedExample}</p>
+        </div>
+      )}
+
+      <DetailList title="Formal details and notation" items={section.formalDetails} />
+      <DetailList title="Important characteristics" items={section.bullets} />
+      <DetailList title="Types and classification" items={section.types} />
+      <DetailList title="How it works" items={section.working} />
+      <DetailList title="Examples" items={section.examples} />
+      <DetailList title="Formulas" items={section.formula} />
+      <DetailList title="Applications" items={section.applications} />
+
+      <ComparisonTable comparison={section.comparison} />
+
+      <DetailList title="Advantages" items={section.advantages} />
+      <DetailList title="Limitations" items={section.disadvantages} />
+
+      {section.takeaway && (
+        <div className="guided-takeaway">
+          <strong>Key takeaway</strong>
+          <p>{section.takeaway}</p>
+        </div>
+      )}
+    </article>
+  );
+}
+
+function Glossary({ items }) {
+  if (!items?.length) return null;
+
+  return (
+    <section className="notes-section guided-glossary">
+      <div className="notes-section-heading">
+        <BookMarked size={21} />
+        <h2>Important Terminology</h2>
+      </div>
+
+      <div className="glossary-list">
+        {items.map((item, index) => (
+          <div className="glossary-item" key={index}>
+            <strong>{item.term}</strong>
+            <p>{item.meaning}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export default function GeneratedNotes() {
   const location = useLocation();
   const data = location.state;
@@ -217,6 +310,15 @@ export default function GeneratedNotes() {
 
   const topic = data.topic || notes.title || "Generated Notes";
   const isLecture = data.mode === "lecture";
+
+  const learningStyle = (
+    notes.learningStyle ||
+    data.learning_style ||
+    (isLecture ? "guided" : "structured")
+  ).toLowerCase();
+
+  const isGuided = learningStyle === "guided";
+
   const transcriptSegments = data.segments || [];
   const importantPoints = isLecture
     ? detectImportantPoints(transcriptSegments)
@@ -228,12 +330,24 @@ export default function GeneratedNotes() {
     topic,
     mode: data.mode,
     level: data.level,
+    learning_style: learningStyle,
     fileName: data.fileName,
   };
 
   const notesText = [
     notes.title || topic,
     "",
+    isGuided ? "GUIDED TEACHING NOTES" : "STRUCTURED NOTES",
+    "",
+    notes.introduction || "",
+    "",
+    ...(notes.learningObjectives?.length
+      ? [
+          "WHAT YOU WILL LEARN",
+          ...notes.learningObjectives.map((item) => `- ${item}`),
+          "",
+        ]
+      : []),
     "SUMMARY",
     notes.summary || "",
     "",
@@ -241,20 +355,31 @@ export default function GeneratedNotes() {
     ...(notes.keyPoints || []).map((point) => `- ${point}`),
     "",
     "DETAILED NOTES",
-    ...(notes.sections || []).flatMap((section) => [
-      section.heading || "",
+    ...(notes.sections || []).flatMap((section, index) => [
+      `${index + 1}. ${section.heading || ""}`,
+      section.purpose ? `Why it matters: ${section.purpose}` : "",
       section.definition ? `Definition: ${section.definition}` : "",
       section.content || "",
+      section.analogy ? `Analogy: ${section.analogy}` : "",
+      section.workedExample ? `Worked example: ${section.workedExample}` : "",
+      ...(section.formalDetails || []).map((item) => `Formal detail: ${item}`),
       ...(section.bullets || []).map((item) => `- ${item}`),
       ...(section.types || []).map((item) => `Type: ${item}`),
       ...(section.working || []).map((item) => `Step: ${item}`),
       ...(section.examples || []).map((item) => `Example: ${item}`),
-      ...(section.advantages || []).map((item) => `Advantage: ${item}`),
-      ...(section.disadvantages || []).map((item) => `Disadvantage: ${item}`),
-      ...(section.applications || []).map((item) => `Application: ${item}`),
       ...(section.formula || []).map((item) => `Formula: ${item}`),
+      ...(section.applications || []).map((item) => `Application: ${item}`),
+      section.takeaway ? `Key takeaway: ${section.takeaway}` : "",
       "",
     ]),
+    ...(notes.recap ? ["TOPIC RECAP", notes.recap, ""] : []),
+    ...(notes.glossary?.length
+      ? [
+          "IMPORTANT TERMINOLOGY",
+          ...notes.glossary.map((item) => `${item.term}: ${item.meaning}`),
+          "",
+        ]
+      : []),
     "CONCEPT–EXAMPLE PAIRING",
     ...(notes.conceptExamples || []).flatMap((item) => [
       `Concept: ${item.concept}`,
@@ -277,7 +402,7 @@ export default function GeneratedNotes() {
       `A: ${item.answer}`,
       "",
     ]),
-  ].join("\n");
+  ].filter((line) => line !== null && line !== undefined).join("\n");
 
   const handleCopy = async () => {
     try {
@@ -289,19 +414,14 @@ export default function GeneratedNotes() {
     }
   };
 
-  const handlePDF = () => {
-    exportNotesPDF(notes, metadata);
-  };
-
-  const handleTXT = () => {
-    exportNotesTXT(notes, metadata);
-  };
+  const handlePDF = () => exportNotesPDF(notes, metadata);
+  const handleTXT = () => exportNotesTXT(notes, metadata);
 
   return (
     <>
       <Navbar />
 
-      <main className="notes-page">
+      <main className={`notes-page ${isGuided ? "guided-notes-page" : ""}`}>
         <div className="notes-container">
           <Link to="/mode-selection" className="notes-back">
             <ArrowLeft size={18} />
@@ -313,8 +433,12 @@ export default function GeneratedNotes() {
               <BookOpen size={28} />
             </div>
             <div>
-              <h1>Generated Notes</h1>
-              <p>Your AI-generated study material.</p>
+              <h1>{isGuided ? "Guided Teaching Notes" : "Generated Notes"}</h1>
+              <p>
+                {isGuided
+                  ? "Learn the topic through connected, step-by-step explanations."
+                  : "Your organized academic study material."}
+              </p>
             </div>
           </header>
 
@@ -325,7 +449,12 @@ export default function GeneratedNotes() {
               <span className="notes-mode">
                 {isLecture ? "Lecture Mode" : "Study Mode"}
               </span>
-              {data.level && <p>Level: {data.level}</p>}
+              <span className="notes-style-badge">
+                {isGuided ? "Guided Explanation" : "Structured Notes"}
+              </span>
+              {data.level && (
+                <p className="notes-level">Learning level: {data.level}</p>
+              )}
             </div>
 
             <button
@@ -365,85 +494,171 @@ export default function GeneratedNotes() {
               <Download size={17} />
               Download PDF
             </button>
-
             <button type="button" onClick={handleTXT}>
               <FileText size={17} />
               Download TXT
             </button>
           </div>
 
-          <section className="notes-section">
-            <div className="notes-section-heading">
-              <Lightbulb size={21} />
-              <h2>Summary</h2>
-            </div>
-            <p className="notes-summary">{notes.summary}</p>
-          </section>
+          {isGuided ? (
+            <>
+              {notes.introduction && (
+                <section className="guided-introduction">
+                  <span className="guided-eyebrow">LET'S UNDERSTAND THE TOPIC</span>
+                  <h2>{notes.title || topic}</h2>
+                  <p>{notes.introduction}</p>
+                </section>
+              )}
 
-          <section className="notes-section">
-            <div className="notes-section-heading">
-              <ListChecks size={21} />
-              <h2>Key Points</h2>
-            </div>
-            <ul className="notes-key-list">
-              {(notes.keyPoints || []).map((point, index) => (
-                <li key={index}>{point}</li>
-              ))}
-            </ul>
-          </section>
+              {notes.learningObjectives?.length > 0 && (
+                <section className="notes-section">
+                  <div className="notes-section-heading">
+                    <Target size={21} />
+                    <h2>What You Will Learn</h2>
+                  </div>
+                  <ul className="notes-key-list">
+                    {notes.learningObjectives.map((item, index) => (
+                      <li key={index}>{item}</li>
+                    ))}
+                  </ul>
+                </section>
+              )}
 
-          <section className="notes-section">
-            <div className="notes-section-heading">
-              <FileText size={21} />
-              <h2>Detailed Study Notes</h2>
-            </div>
+              {notes.summary && (
+                <section className="guided-summary">
+                  <div className="notes-section-heading">
+                    <Lightbulb size={21} />
+                    <h2>At a Glance</h2>
+                  </div>
+                  <p>{notes.summary}</p>
+                </section>
+              )}
 
-            <div className="notes-content">
-              {(notes.sections || []).map((section, index) => (
-                <article className="notes-article" key={index}>
-                  <h3>{section.heading}</h3>
-
-                  {section.definition && (
-                    <div className="notes-definition">
-                      <strong>Definition</strong>
-                      <p>{section.definition}</p>
+              {notes.sections?.length > 0 && (
+                <section className="guided-teaching-section">
+                  <div className="guided-main-heading">
+                    <GraduationCap size={23} />
+                    <div>
+                      <h2>Let's Build Your Understanding</h2>
+                      <p>
+                        Follow the concepts in order. Each section builds
+                        on what you have just learned.
+                      </p>
                     </div>
-                  )}
+                  </div>
 
-                  {section.content && <p>{section.content}</p>}
+                  <div className="guided-articles">
+                    {notes.sections.map((section, index) => (
+                      <GuidedSection
+                        section={section}
+                        index={index}
+                        key={index}
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
 
-                  <DetailList title="Key Characteristics" items={section.bullets} />
-                  <DetailList title="Types / Classification" items={section.types} />
-                  <DetailList title="Working / Steps" items={section.working} />
-                  <DetailList title="Examples" items={section.examples} />
-                  <DetailList title="Advantages" items={section.advantages} />
-                  <DetailList title="Disadvantages" items={section.disadvantages} />
-                  <DetailList title="Applications" items={section.applications} />
-                  <DetailList title="Formulas" items={section.formula} />
+              {notes.recap && (
+                <section className="guided-recap">
+                  <div className="notes-section-heading">
+                    <BookOpen size={21} />
+                    <h2>Bringing It All Together</h2>
+                  </div>
+                  <p>{notes.recap}</p>
+                </section>
+              )}
 
-                  <ComparisonTable comparison={section.comparison} />
-                </article>
-              ))}
-            </div>
-          </section>
+              <Glossary items={notes.glossary} />
+            </>
+          ) : (
+            <>
+              {notes.summary && (
+                <section className="notes-section">
+                  <div className="notes-section-heading">
+                    <Lightbulb size={21} />
+                    <h2>Summary</h2>
+                  </div>
+                  <p className="notes-summary">{notes.summary}</p>
+                </section>
+              )}
 
-          {(notes.conceptExamples || []).length > 0 && (
+              {notes.keyPoints?.length > 0 && (
+                <section className="notes-section">
+                  <div className="notes-section-heading">
+                    <ListChecks size={21} />
+                    <h2>Key Points</h2>
+                  </div>
+                  <ul className="notes-key-list">
+                    {notes.keyPoints.map((point, index) => (
+                      <li key={index}>{point}</li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
+              {notes.sections?.length > 0 && (
+                <section className="notes-section">
+                  <div className="notes-section-heading">
+                    <FileText size={21} />
+                    <h2>Detailed Study Notes</h2>
+                  </div>
+
+                  <div className="notes-content">
+                    {notes.sections.map((section, index) => (
+                      <article className="notes-article" key={index}>
+                        <h3>{section.heading}</h3>
+                        {section.definition && (
+                          <div className="notes-definition">
+                            <strong>Definition</strong>
+                            <p>{section.definition}</p>
+                          </div>
+                        )}
+                        {section.content && <p>{section.content}</p>}
+                        <DetailList title="Key Characteristics" items={section.bullets} />
+                        <DetailList title="Types / Classification" items={section.types} />
+                        <DetailList title="Working / Steps" items={section.working} />
+                        <DetailList title="Examples" items={section.examples} />
+                        <DetailList title="Advantages" items={section.advantages} />
+                        <DetailList title="Disadvantages" items={section.disadvantages} />
+                        <DetailList title="Applications" items={section.applications} />
+                        <DetailList title="Formulas" items={section.formula} />
+                        <ComparisonTable comparison={section.comparison} />
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              )}
+            </>
+          )}
+
+          {notes.keyPoints?.length > 0 && isGuided && (
+            <section className="notes-section">
+              <div className="notes-section-heading">
+                <ListChecks size={21} />
+                <h2>Key Ideas to Remember</h2>
+              </div>
+              <ul className="notes-key-list">
+                {notes.keyPoints.map((point, index) => (
+                  <li key={index}>{point}</li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {notes.conceptExamples?.length > 0 && (
             <section className="notes-section">
               <div className="notes-section-heading">
                 <Brain size={21} />
                 <h2>Concept–Example Pairing</h2>
               </div>
-
               <p className="section-description">
                 Understand important concepts through relevant examples.
               </p>
-
               <div className="concept-example-grid">
                 {notes.conceptExamples.map((item, index) => (
                   <article className="concept-example-card" key={index}>
-                    <span className="concept-number">
-                      CONCEPT {index + 1}
-                    </span>
+                    <span className="concept-number">CONCEPT {index + 1}</span>
                     <h3>{item.concept}</h3>
                     <p>{item.explanation}</p>
                     <div className="concept-example">
@@ -461,17 +676,15 @@ export default function GeneratedNotes() {
             </section>
           )}
 
-          {(notes.diagrams || []).length > 0 && (
+          {notes.diagrams?.length > 0 && (
             <section className="notes-section">
               <div className="notes-section-heading">
                 <Network size={21} />
                 <h2>Diagrams and Visual Explanations</h2>
               </div>
-
               <p className="section-description">
                 Visual representations of important concepts and processes.
               </p>
-
               <div className="notes-diagrams-list">
                 {notes.diagrams.map((diagram, index) => (
                   <MermaidDiagram diagram={diagram} key={index} />
@@ -480,51 +693,53 @@ export default function GeneratedNotes() {
             </section>
           )}
 
-          <section className="notes-section">
-            <div className="notes-section-heading">
-              <Sparkles size={21} />
-              <h2>Important Keywords</h2>
-            </div>
-            <div className="notes-keyword-list">
-              {(notes.keywords || []).map((word, index) => (
-                <span className="notes-keyword" key={index}>
-                  {word}
-                </span>
-              ))}
-            </div>
-          </section>
+          {notes.keywords?.length > 0 && (
+            <section className="notes-section">
+              <div className="notes-section-heading">
+                <Sparkles size={21} />
+                <h2>Important Keywords</h2>
+              </div>
+              <div className="notes-keyword-list">
+                {notes.keywords.map((word, index) => (
+                  <span className="notes-keyword" key={index}>{word}</span>
+                ))}
+              </div>
+            </section>
+          )}
 
-          <section className="notes-section">
-            <div className="notes-section-heading">
-              <ListChecks size={21} />
-              <h2>Quick Revision</h2>
-            </div>
-            <ul className="notes-key-list">
-              {(Array.isArray(notes.revision)
-                ? notes.revision
-                : notes.revision
-                  ? [notes.revision]
-                  : []
-              ).map((point, index) => (
-                <li key={index}>{point}</li>
-              ))}
-            </ul>
-          </section>
+          {notes.revision?.length > 0 && (
+            <section className="notes-section">
+              <div className="notes-section-heading">
+                <ListChecks size={21} />
+                <h2>Quick Revision</h2>
+              </div>
+              <ul className="notes-key-list">
+                {(Array.isArray(notes.revision)
+                  ? notes.revision
+                  : [notes.revision]
+                ).map((point, index) => (
+                  <li key={index}>{point}</li>
+                ))}
+              </ul>
+            </section>
+          )}
 
-          <section className="notes-section">
-            <div className="notes-section-heading">
-              <BookOpen size={21} />
-              <h2>Self-Assessment Questions</h2>
-            </div>
-            <div className="notes-content">
-              {(notes.questions || []).map((item, index) => (
-                <article className="notes-article" key={index}>
-                  <h3>Q{index + 1}. {item.question}</h3>
-                  <p><strong>Answer:</strong> {item.answer}</p>
-                </article>
-              ))}
-            </div>
-          </section>
+          {notes.questions?.length > 0 && (
+            <section className="notes-section">
+              <div className="notes-section-heading">
+                <BookOpen size={21} />
+                <h2>Self-Assessment Questions</h2>
+              </div>
+              <div className="notes-content">
+                {notes.questions.map((item, index) => (
+                  <article className="notes-article" key={index}>
+                    <h3>Q{index + 1}. {item.question}</h3>
+                    <p><strong>Answer:</strong> {item.answer}</p>
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
 
           {isLecture && importantPoints.length > 0 && (
             <section className="notes-section important-points-section">
@@ -532,7 +747,6 @@ export default function GeneratedNotes() {
               <p className="section-description">
                 Statements containing emphasis phrases detected in your lecture.
               </p>
-
               <div className="important-points-list">
                 {importantPoints.map((point, index) => (
                   <div className="important-point" key={index}>
@@ -553,7 +767,6 @@ export default function GeneratedNotes() {
                   <h2>Lecture Transcript</h2>
                   <span>{transcriptSegments.length} segments</span>
                 </summary>
-
                 <div className="transcript-list">
                   {transcriptSegments.map((segment, index) => (
                     <div className="transcript-item" key={index}>

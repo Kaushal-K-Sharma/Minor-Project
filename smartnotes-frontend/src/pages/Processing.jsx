@@ -57,10 +57,11 @@ export default function Processing() {
             setStatus("Generating your study notes...");
 
             requestPromiseRef.current = generateStudyNotes({
-              topic: data.topic,
-              subtopic: data.subtopic,
-              level: data.level,
-            });
+            topic: data.topic,
+            subtopic: data.subtopic,
+            level: data.level,
+            learning_style: data.learning_style,
+          });
           } else {
             setStatus("Uploading your lecture and extracting audio...");
 
@@ -273,7 +274,21 @@ export default function Processing() {
                       <strong>{data.level}</strong>
                     </div>
                   </div>
+
+                  <div className="processing-detail-row">
+                    <Sparkles size={19} />
+                    <div>
+                      <span>Learning style</span>
+                      <strong>
+                        {data.learning_style === "guided"
+                          ? "Guided Explanation"
+                          : "Structured Notes"}
+                      </strong>
+                    </div>
+                  </div>
+
                 </>
+
               )}
 
               {isLectureMode && (
